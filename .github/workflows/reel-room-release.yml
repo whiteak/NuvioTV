@@ -1,0 +1,152 @@
+name: Reel Room sync and release
+
+# Weekly: merge the latest upstream Nuvio code into this fork (keeping the Reel Room
+# customisations), then build and publish a Reel Room release that the in-app updater picks up.
+# Also runs on pushes to the default branch, releasing only when the app version is new.
+
+on:
+  schedule:
+    - cron: "0 18 * * 0"
+  workflow_dispatch:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: reel-room-release
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: NuvioMedia/NuvioTV
+  BRANCH: dev
+
+jobs:
+  sync:
+    name: Merge upstream Nuvio
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BRANCH }}
+          fetch-depth: 0
+
+      - name: Merge upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "reel-room-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          git fetch --no-tags upstream "${BRANCH}"
+
+          if git merge-base --is-ancestor "upstream/${BRANCH}" HEAD; then
+            echo "Already up to date with ${UPSTREAM_REPO}."
+            exit 0
+          fi
+
+          git merge --no-commit --no-ff "upstream/${BRANCH}" || true
+
+          # Keep this fork's own workflows exactly as they are (upstream CI and bots stay removed).
+          rm -rf .github/workflows
+          git checkout HEAD -- .github/workflows
+          git add -A .github/workflows
+
+          # Keep Reel Room branding images when upstream changed the same files.
+          unresolved=""
+          for f in $(git diff --name-only --diff-filter=U); do
+            case "$f" in
+              *.png|*.webp|*.jpg|*.jpeg)
+                if git cat-file -e "HEAD:$f" 2>/dev/null; then
+                  git checkout HEAD -- "$f"
+                  git add "$f"
+                else
+                  git rm -q "$f"
+                fi ;;
+              *) unresolved="$unresolved $f" ;;
+            esac
+          done
+
+          if [ -n "$unresolved" ]; then
+            git merge --abort
+            body=$(printf 'The weekly sync with %s conflicts with Reel Room changes in:\n\n%s\n\nNothing was changed. Ask Claude in the Reel Room thread to resolve it.' "$UPSTREAM_REPO" "$unresolved")
+            gh issue create --title "Reel Room: upstream sync needs attention" --body "$body" || true
+            echo "::error::Merge conflicts in:${unresolved}"
+            exit 1
+          fi
+
+          git commit -m "Sync with upstream ${UPSTREAM_REPO}"
+          git push origin "HEAD:${BRANCH}"
+
+  release:
+    name: Build and publish Reel Room
+    needs: sync
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BRANCH }}
+
+      - name: Read app version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts | head -1)
+          if [ -z "$version" ]; then echo "::error::Could not read app version"; exit 1; fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" >/dev/null 2>&1; then
+            echo "Release v$version already exists; nothing to publish."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check signing key
+        if: steps.version.outputs.skip == 'false'
+        env:
+          KEYSTORE: ${{ secrets.REELROOM_KEYSTORE }}
+          KEY_PASSWORD: ${{ secrets.REELROOM_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::Add the REELROOM_KEYSTORE and REELROOM_KEY_PASSWORD secrets (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v4
+        if: steps.version.outputs.skip == 'false'
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Build
+        if: steps.version.outputs.skip == 'false'
+        env:
+          KEYSTORE: ${{ secrets.REELROOM_KEYSTORE }}
+          KEY_PASSWORD: ${{ secrets.REELROOM_KEY_PASSWORD }}
+        run: |
+          printf '%s' "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/reelroom.jks"
+          touch local.properties local.dev.properties
+          NUVIO_RELEASE_STORE_FILE="$RUNNER_TEMP/reelroom.jks" NUVIO_RELEASE_KEY_ALIAS=reelroom \
+          NUVIO_RELEASE_KEY_PASSWORD="$KEY_PASSWORD" NUVIO_RELEASE_STORE_PASSWORD="$KEY_PASSWORD" \
+            ./gradlew :app:assembleFullDebug --stacktrace
+
+      - name: Publish release
+        if: steps.version.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cp "app/build/outputs/apk/full/debug/app-full-universal-debug.apk" "ReelRoom-TV-${VERSION}.apk"
+          prerelease=""
+          case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "v${VERSION}" "ReelRoom-TV-${VERSION}.apk" \
+            --target "$(git rev-parse HEAD)" \
+            --title "Reel Room ${VERSION}" \
+            --notes "Reel Room ${VERSION}, built on Nuvio ${VERSION} from ${UPSTREAM_REPO}." \
+            $prerelease

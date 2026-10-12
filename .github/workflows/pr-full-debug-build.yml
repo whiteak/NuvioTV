@@ -47,23 +47,35 @@ jobs:
           fi
 
       - name: Prepare CI signing config
+        env:
+          KEYSTORE: ${{ secrets.REELROOM_KEYSTORE }}
+          KEY_PASSWORD: ${{ secrets.REELROOM_KEY_PASSWORD }}
         run: |
-          keytool -genkeypair \
-            -v \
-            -keystore "$RUNNER_TEMP/ci-debug.jks" \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -dname "CN=Android Debug,O=Android,C=US" \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000
+          # Reel Room: sign with the personal key when available so test builds install over releases.
+          if [ -n "$KEYSTORE" ] && [ -n "$KEY_PASSWORD" ]; then
+            printf '%s' "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/ci-debug.jks"
+            alias=reelroom
+            password="$KEY_PASSWORD"
+          else
+            keytool -genkeypair \
+              -v \
+              -keystore "$RUNNER_TEMP/ci-debug.jks" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000
+            alias=androiddebugkey
+            password=android
+          fi
 
           {
             echo "NUVIO_RELEASE_STORE_FILE=$RUNNER_TEMP/ci-debug.jks"
-            echo "NUVIO_RELEASE_KEY_ALIAS=androiddebugkey"
-            echo "NUVIO_RELEASE_KEY_PASSWORD=android"
-            echo "NUVIO_RELEASE_STORE_PASSWORD=android"
+            echo "NUVIO_RELEASE_KEY_ALIAS=$alias"
+            echo "NUVIO_RELEASE_KEY_PASSWORD=$password"
+            echo "NUVIO_RELEASE_STORE_PASSWORD=$password"
           } >> "$GITHUB_ENV"
 
       - name: Test updater and build fullDebug APK
