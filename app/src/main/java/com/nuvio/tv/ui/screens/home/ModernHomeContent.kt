@@ -1099,15 +1099,6 @@ fun ModernHomeContent(
                 modifier = heroMetadataModifier
             )
 
-            // Ethereal: edition artwork banner across the top of Home.
-            com.nuvio.tv.ui.components.EditionHomeBanner(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = rowHorizontalPadding, top = NuvioTheme.spacing.lg)
-                    .height(120.dp)
-                    .graphicsLayer { alpha = trailerContentAlphaState.value }
-            )
-
             val latestOnFocusedRowKeyChanged by rememberUpdatedState(onFocusedRowKeyChanged)
             val onActiveRowKeyChangeLambda = remember {
                 { key: String? ->
