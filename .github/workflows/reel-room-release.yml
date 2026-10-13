@@ -82,7 +82,7 @@ jobs:
           git push origin "HEAD:${BRANCH}"
 
   release:
-    name: Build and publish Reel Room
+    name: Build and publish Ethereal
     needs: sync
     if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
@@ -158,18 +158,20 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           REFRESH: ${{ steps.version.outputs.refresh }}
         run: |
+          cp "$RUNNER_TEMP/ReelRoom.apk" "Ethereal-TV-${VERSION}.apk"
+          # Same APK under the old name, so installs from before the rename still find their updates.
           cp "$RUNNER_TEMP/ReelRoom.apk" "ReelRoom-TV-${VERSION}.apk"
           cp "$RUNNER_TEMP/Requiem.apk" "Requiem-TV-${VERSION}.apk"
-          NOTES=$(printf 'Reel Room %s, built on Nuvio %s from %s.\n\nReelRoom-* is Reel Room; Requiem-* is the Requiem edition.\n\nBuilt from commit %s' "$VERSION" "$VERSION" "$UPSTREAM_REPO" "$(git rev-parse HEAD)")
+          NOTES=$(printf 'Ethereal %s, built on Nuvio %s from %s.\n\nEthereal-* is Ethereal (ReelRoom-* is the same file under its old name); Requiem-* is the Requiem edition.\n\nBuilt from commit %s' "$VERSION" "$VERSION" "$UPSTREAM_REPO" "$(git rev-parse HEAD)")
           if [ "$REFRESH" = "true" ]; then
-            gh release upload "v${VERSION}" "ReelRoom-TV-${VERSION}.apk" "Requiem-TV-${VERSION}.apk" --clobber
-            gh release edit "v${VERSION}" --notes "$NOTES"
+            gh release upload "v${VERSION}" "Ethereal-TV-${VERSION}.apk" "Requiem-TV-${VERSION}.apk" "ReelRoom-TV-${VERSION}.apk" --clobber
+            gh release edit "v${VERSION}" --title "Ethereal ${VERSION}" --notes "$NOTES"
             exit 0
           fi
           prerelease=""
           case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
-          gh release create "v${VERSION}" "ReelRoom-TV-${VERSION}.apk" "Requiem-TV-${VERSION}.apk" \
+          gh release create "v${VERSION}" "Ethereal-TV-${VERSION}.apk" "Requiem-TV-${VERSION}.apk" "ReelRoom-TV-${VERSION}.apk" \
             --target "$(git rev-parse HEAD)" \
-            --title "Reel Room ${VERSION}" \
+            --title "Ethereal ${VERSION}" \
             --notes "$NOTES" \
             $prerelease

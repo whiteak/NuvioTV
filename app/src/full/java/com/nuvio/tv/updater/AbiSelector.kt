@@ -3,8 +3,8 @@ package com.nuvio.tv.updater
 import android.os.Build
 import com.nuvio.tv.data.remote.dto.GitHubAssetDto
 
-/** Reel Room: each app edition only installs APKs published under its own name. */
-internal const val RELEASE_ASSET_PREFIX = "ReelRoom-"
+/** Ethereal: each app edition only installs APKs published under its own name. */
+internal const val RELEASE_ASSET_PREFIX = "Ethereal-"
 
 internal object AbiSelector {
 

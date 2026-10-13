@@ -45,14 +45,25 @@ object ThemeColors {
         backgroundCard = Color(0xFF1A1F24)
     )
 
+    // Reel Room: the Violet slot is restyled as the Ethereal theme (twilight violet with opal highlights).
     val Violet = ThemeColorPalette(
-        secondary = NuvioPrimitives.violet500,
-        secondaryVariant = NuvioPrimitives.violet700,
-        focusRing = NuvioPrimitives.violet300,
-        focusBackground = Color(0xFF2D1A3D),
-        background = Color(0xFF0D0D0F),
-        backgroundElevated = Color(0xFF1A1A1E),
-        backgroundCard = Color(0xFF1F1A24)
+        secondary = Color(0xFFB9A6FF),
+        secondaryVariant = Color(0xFF7D63D9),
+        onSecondary = Color(0xFF1B1530),
+        onSecondaryVariant = NuvioPrimitives.white,
+        accentGradient = listOf(Color(0xFFCFE9FF), Color(0xFFE7DCFF), Color(0xFFFFD9F0)),
+        focusRing = Color(0xFFE7DCFF),
+        focusRingGradient = listOf(Color(0xFFCFE9FF), Color(0xFFE7DCFF), Color(0xFFFFD9F0)),
+        focusBackground = Color(0xFF2A2150),
+        background = Color(0xFF0E0B1A),
+        backgroundElevated = Color(0xFF18132B),
+        backgroundCard = Color(0xFF1F1938),
+        surface = Color(0xFF1A1530),
+        surfaceVariant = Color(0xFF241D40),
+        panel = Color(0xFF15112A),
+        field = Color(0xFF211B3A),
+        menu = Color(0xFF1A1530),
+        modal = Color(0xFF15112A)
     )
 
     val Emerald = ThemeColorPalette(

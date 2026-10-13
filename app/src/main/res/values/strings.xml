@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Reel Room</string>
+    <string name="app_name">Ethereal</string>
     <string name="tv_channel_continue_watching">Continue Watching</string>
     <string name="type_movie">Movie</string>
     <string name="type_movies">Movies</string>
@@ -334,7 +334,7 @@
     <string name="theme_color_graphite">Graphite</string>
     <string name="theme_color_crimson">Crimson</string>
     <string name="theme_color_ocean">Ocean</string>
-    <string name="theme_color_violet">Violet</string>
+    <string name="theme_color_violet">Ethereal</string>
     <string name="theme_color_emerald">Emerald</string>
     <string name="theme_color_amber">Amber</string>
     <string name="theme_color_rose">Rose</string>
@@ -409,7 +409,7 @@
 
     <string name="about_title">About</string>
     <string name="about_subtitle">App information, updates, and legal links</string>
-    <string name="about_made_with_love">Reel Room · built on Nuvio by Tapframe and friends</string>
+    <string name="about_made_with_love">Ethereal · built on Nuvio by Tapframe and friends</string>
     <string name="about_version">Version %1$s</string>
     <string name="about_update_banner_title">Automatic update banner</string>
     <string name="about_update_banner_subtitle">Show a banner when a new version is available</string>
