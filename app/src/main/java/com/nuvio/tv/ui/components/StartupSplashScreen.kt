@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -94,6 +96,14 @@ fun StartupSplashScreen(
                     )
             )
         }
+
+        // Ethereal: each edition shows its own artwork while the app starts.
+        Image(
+            painter = painterResource(id = R.drawable.edition_loading_art),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
 
         Column(
             modifier = Modifier.fillMaxSize(),
