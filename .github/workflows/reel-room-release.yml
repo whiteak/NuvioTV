@@ -100,8 +100,15 @@ jobs:
           if [ -z "$version" ]; then echo "::error::Could not read app version"; exit 1; fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           if gh release view "v$version" >/dev/null 2>&1; then
-            echo "Release v$version already exists; nothing to publish."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
+            built_sha=$(gh release view "v$version" --json body --jq .body | sed -n 's/^Built from commit //p' | head -1)
+            if [ "$built_sha" = "$(git rev-parse HEAD)" ]; then
+              echo "Release v$version is already up to date; nothing to publish."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "Release v$version exists but this branch has newer changes; refreshing its APK."
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+              echo "refresh=true" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
@@ -141,12 +148,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
+          REFRESH: ${{ steps.version.outputs.refresh }}
         run: |
           cp "app/build/outputs/apk/full/debug/app-full-universal-debug.apk" "ReelRoom-TV-${VERSION}.apk"
+          APK=$(ls ReelRoom-*.apk)
+          NOTES=$(printf 'Reel Room %s, built on Nuvio %s from %s.\n\nBuilt from commit %s' "$VERSION" "$VERSION" "$UPSTREAM_REPO" "$(git rev-parse HEAD)")
+          if [ "$REFRESH" = "true" ]; then
+            gh release upload "v${VERSION}" "$APK" --clobber
+            gh release edit "v${VERSION}" --notes "$NOTES"
+            exit 0
+          fi
           prerelease=""
           case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
           gh release create "v${VERSION}" "ReelRoom-TV-${VERSION}.apk" \
             --target "$(git rev-parse HEAD)" \
             --title "Reel Room ${VERSION}" \
-            --notes "Reel Room ${VERSION}, built on Nuvio ${VERSION} from ${UPSTREAM_REPO}." \
+            --notes "$NOTES" \
             $prerelease
