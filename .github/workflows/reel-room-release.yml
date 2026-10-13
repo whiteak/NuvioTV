@@ -142,6 +142,14 @@ jobs:
           NUVIO_RELEASE_STORE_FILE="$RUNNER_TEMP/reelroom.jks" NUVIO_RELEASE_KEY_ALIAS=reelroom \
           NUVIO_RELEASE_KEY_PASSWORD="$KEY_PASSWORD" NUVIO_RELEASE_STORE_PASSWORD="$KEY_PASSWORD" \
             ./gradlew :app:assembleFullDebug --stacktrace
+          cp "app/build/outputs/apk/full/debug/app-full-universal-debug.apk" "$RUNNER_TEMP/ReelRoom.apk"
+          # Requiem: the same app with its own name, artwork and app ID, so it installs alongside.
+          bash editions/requiem/apply.sh
+          NUVIO_RELEASE_STORE_FILE="$RUNNER_TEMP/reelroom.jks" NUVIO_RELEASE_KEY_ALIAS=reelroom \
+          NUVIO_RELEASE_KEY_PASSWORD="$KEY_PASSWORD" NUVIO_RELEASE_STORE_PASSWORD="$KEY_PASSWORD" \
+            ./gradlew :app:assembleFullDebug --stacktrace
+          cp "app/build/outputs/apk/full/debug/app-full-universal-debug.apk" "$RUNNER_TEMP/Requiem.apk"
+          git checkout -- . && git clean -fdq -e local.properties -e local.dev.properties
 
       - name: Publish release
         if: steps.version.outputs.skip == 'false'
@@ -150,17 +158,17 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           REFRESH: ${{ steps.version.outputs.refresh }}
         run: |
-          cp "app/build/outputs/apk/full/debug/app-full-universal-debug.apk" "ReelRoom-TV-${VERSION}.apk"
-          APK=$(ls ReelRoom-*.apk)
-          NOTES=$(printf 'Reel Room %s, built on Nuvio %s from %s.\n\nBuilt from commit %s' "$VERSION" "$VERSION" "$UPSTREAM_REPO" "$(git rev-parse HEAD)")
+          cp "$RUNNER_TEMP/ReelRoom.apk" "ReelRoom-TV-${VERSION}.apk"
+          cp "$RUNNER_TEMP/Requiem.apk" "Requiem-TV-${VERSION}.apk"
+          NOTES=$(printf 'Reel Room %s, built on Nuvio %s from %s.\n\nReelRoom-* is Reel Room; Requiem-* is the Requiem edition.\n\nBuilt from commit %s' "$VERSION" "$VERSION" "$UPSTREAM_REPO" "$(git rev-parse HEAD)")
           if [ "$REFRESH" = "true" ]; then
-            gh release upload "v${VERSION}" "$APK" --clobber
+            gh release upload "v${VERSION}" "ReelRoom-TV-${VERSION}.apk" "Requiem-TV-${VERSION}.apk" --clobber
             gh release edit "v${VERSION}" --notes "$NOTES"
             exit 0
           fi
           prerelease=""
           case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
-          gh release create "v${VERSION}" "ReelRoom-TV-${VERSION}.apk" \
+          gh release create "v${VERSION}" "ReelRoom-TV-${VERSION}.apk" "Requiem-TV-${VERSION}.apk" \
             --target "$(git rev-parse HEAD)" \
             --title "Reel Room ${VERSION}" \
             --notes "$NOTES" \

@@ -3,6 +3,9 @@ package com.nuvio.tv.updater
 import android.os.Build
 import com.nuvio.tv.data.remote.dto.GitHubAssetDto
 
+/** Reel Room: each app edition only installs APKs published under its own name. */
+internal const val RELEASE_ASSET_PREFIX = "ReelRoom-"
+
 internal object AbiSelector {
 
     private val knownAbis = listOf(
@@ -13,7 +16,9 @@ internal object AbiSelector {
     )
 
     fun chooseBestApkAsset(assets: List<GitHubAssetDto>): GitHubAssetDto? {
-        val apkAssets = assets.filter { it.name.endsWith(".apk", ignoreCase = true) }
+        val apkAssets = assets.filter {
+            it.name.endsWith(".apk", ignoreCase = true) && it.name.startsWith(RELEASE_ASSET_PREFIX, ignoreCase = true)
+        }
         if (apkAssets.isEmpty()) return null
         if (apkAssets.size == 1) return apkAssets.first()
 
