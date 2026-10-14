@@ -7,6 +7,7 @@ import com.nuvio.tv.data.repository.MemberAccessRepository
 import com.nuvio.tv.domain.model.AppFont
 import com.nuvio.tv.domain.model.AppIconOption
 import com.nuvio.tv.domain.model.AppTheme
+import com.nuvio.tv.domain.model.EDITION_DEFAULT_THEME
 import com.nuvio.tv.domain.model.CosmeticEntitlements
 import com.nuvio.tv.domain.model.CustomThemeColors
 import com.nuvio.tv.domain.model.SettingsUiStyle
@@ -27,7 +28,7 @@ import javax.inject.Inject
 
 data class ThemeSettingsUiState(
     val themesLoaded: Boolean = false,
-    val selectedTheme: AppTheme = AppTheme.WHITE,
+    val selectedTheme: AppTheme = EDITION_DEFAULT_THEME,
     val customThemeColors: CustomThemeColors = CustomThemeColors.solid(CustomThemeColors.Default.second),
     val customThemeGradientEnabled: Boolean = false,
     val availableThemes: List<AppTheme> = availableAppThemes(CosmeticEntitlements.None),
@@ -89,7 +90,7 @@ class ThemeSettingsViewModel @Inject constructor(
                     _uiState.update { state ->
                         state.copy(
                             themesLoaded = true,
-                            selectedTheme = selection.theme ?: AppTheme.WHITE,
+                            selectedTheme = selection.theme ?: EDITION_DEFAULT_THEME,
                             customThemeColors = selection.customColors,
                             customThemeGradientEnabled = gradientEnabled,
                             availableThemes = availableThemes

@@ -117,7 +117,7 @@ class ProfileSelectionViewModel @Inject constructor(
                     combine(
                         profileList.map { profile ->
                             themeDataStore.observeThemeForProfile(profile.id)
-                                .map { theme -> profile.id to (theme ?: com.nuvio.tv.domain.model.AppTheme.WHITE) }
+                                .map { theme -> profile.id to (theme ?: com.nuvio.tv.domain.model.EDITION_DEFAULT_THEME) }
                         }
                     ) { entries -> entries.toMap() }
                 }

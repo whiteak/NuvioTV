@@ -2,7 +2,7 @@ name: Reel Room sync and release
 
 # Weekly: merge the latest upstream Nuvio code into this fork (keeping the Reel Room
 # customisations), then build and publish a Reel Room release that the in-app updater picks up.
-# Also runs on pushes to the default branch, releasing only when the app version is new.
+# Also runs on pushes to the default branch. Each release gets the next build number.
 
 on:
   schedule:
@@ -96,22 +96,27 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version=$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts | head -1)
-          if [ -z "$version" ]; then echo "::error::Could not read app version"; exit 1; fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          if gh release view "v$version" >/dev/null 2>&1; then
-            built_sha=$(gh release view "v$version" --json body --jq .body | sed -n 's/^Built from commit //p' | head -1)
+          base=$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts | head -1)
+          base_code=$(sed -n 's/^ *versionCode = \([0-9][0-9]*\)$/\1/p' app/build.gradle.kts | head -1)
+          if [ -z "$base" ] || [ -z "$base_code" ]; then echo "::error::Could not read app version"; exit 1; fi
+          # Every Ethereal release gets its own number on top of the Nuvio version (1.1.0-beta.5.1,
+          # 1.1.0-beta.5.2, ...; 1.2.0.1 for a stable Nuvio version), so the in-app updater always sees the newest build as newer.
+          tags=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[].tag_name')
+          last=$(printf '%s\n' "$tags" | sed -n "s/^v$(printf '%s' "$base" | sed 's/[.]/\\./g')\\.\([0-9][0-9]*\)$/\1/p" | sort -n | tail -1)
+          if [ -n "$last" ]; then
+            built_sha=$(gh release view "v$base.$last" --json body --jq .body | sed -n 's/^Built from commit //p' | head -1)
             if [ "$built_sha" = "$(git rev-parse HEAD)" ]; then
-              echo "Release v$version is already up to date; nothing to publish."
+              echo "Release v$base.$last already has this commit; nothing to publish."
               echo "skip=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "Release v$version exists but this branch has newer changes; refreshing its APK."
-              echo "skip=false" >> "$GITHUB_OUTPUT"
-              echo "refresh=true" >> "$GITHUB_OUTPUT"
+              exit 0
             fi
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
+          n=$(( ${last:-0} + 1 ))
+          echo "version=$base.$n" >> "$GITHUB_OUTPUT"
+          echo "code=$(( base_code * 1000 + n ))" >> "$GITHUB_OUTPUT"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "Publishing Ethereal $base.$n"
 
       - name: Check signing key
         if: steps.version.outputs.skip == 'false'
@@ -136,7 +141,11 @@ jobs:
         env:
           KEYSTORE: ${{ secrets.REELROOM_KEYSTORE }}
           KEY_PASSWORD: ${{ secrets.REELROOM_KEY_PASSWORD }}
+          VERSION: ${{ steps.version.outputs.version }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
         run: |
+          sed -i "s/^\( *versionName = \)\".*\"/\1\"$VERSION\"/; s/^\( *versionCode = \)[0-9][0-9]*$/\1$VERSION_CODE/" app/build.gradle.kts
+          grep -q "versionName = \"$VERSION\"" app/build.gradle.kts
           printf '%s' "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/reelroom.jks"
           touch local.properties local.dev.properties
           NUVIO_RELEASE_STORE_FILE="$RUNNER_TEMP/reelroom.jks" NUVIO_RELEASE_KEY_ALIAS=reelroom \
@@ -156,18 +165,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
-          REFRESH: ${{ steps.version.outputs.refresh }}
+          BASE: ${{ steps.version.outputs.base }}
         run: |
           cp "$RUNNER_TEMP/ReelRoom.apk" "Ethereal-TV-${VERSION}.apk"
           # Same APK under the old name, so installs from before the rename still find their updates.
           cp "$RUNNER_TEMP/ReelRoom.apk" "ReelRoom-TV-${VERSION}.apk"
           cp "$RUNNER_TEMP/Requiem.apk" "Requiem-TV-${VERSION}.apk"
-          NOTES=$(printf 'Ethereal %s, built on Nuvio %s from %s.\n\nEthereal-* is Ethereal (ReelRoom-* is the same file under its old name); Requiem-* is the Requiem edition.\n\nBuilt from commit %s' "$VERSION" "$VERSION" "$UPSTREAM_REPO" "$(git rev-parse HEAD)")
-          if [ "$REFRESH" = "true" ]; then
-            gh release upload "v${VERSION}" "Ethereal-TV-${VERSION}.apk" "Requiem-TV-${VERSION}.apk" "ReelRoom-TV-${VERSION}.apk" --clobber
-            gh release edit "v${VERSION}" --title "Ethereal ${VERSION}" --notes "$NOTES"
-            exit 0
-          fi
+          NOTES=$(printf 'Ethereal %s, built on Nuvio %s from %s.\n\nEthereal-* is Ethereal (ReelRoom-* is the same file under its old name); Requiem-* is the Requiem edition.\n\nBuilt from commit %s' "$VERSION" "$BASE" "$UPSTREAM_REPO" "$(git rev-parse HEAD)")
           prerelease=""
           case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
           gh release create "v${VERSION}" "Ethereal-TV-${VERSION}.apk" "Requiem-TV-${VERSION}.apk" "ReelRoom-TV-${VERSION}.apk" \

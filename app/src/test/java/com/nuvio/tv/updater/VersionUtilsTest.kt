@@ -39,4 +39,13 @@ class VersionUtilsTest {
     fun `current beta naming is recognized as prerelease`() {
         assertTrue(VersionUtils.isPrerelease("0.8.12-beta"))
     }
+
+    @Test
+    fun `fork build number makes each release newer`() {
+        assertTrue(VersionUtils.isRemoteNewer("v0.5.9.1", "0.5.9"))
+        assertTrue(VersionUtils.isRemoteNewer("v0.5.9.12", "0.5.9.2"))
+        assertTrue(VersionUtils.isRemoteNewer("v1.1.0-beta.5.2", "1.1.0-beta.5.1"))
+        assertTrue(VersionUtils.isRemoteNewer("v0.5.10.1", "0.5.9.7"))
+        assertFalse(VersionUtils.isRemoteNewer("v0.5.9.3", "0.5.9.3"))
+    }
 }
