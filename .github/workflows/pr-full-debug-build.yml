@@ -48,9 +48,9 @@ jobs:
 
       - name: Prepare CI signing config
         env:
-          KEYSTORE: ${{ secrets.SIGNING_KEYSTORE || secrets.REELROOM_KEYSTORE }}
-          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD || secrets.REELROOM_KEY_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.SIGNING_KEYSTORE && 'ethereal' || 'reelroom' }}
+          KEYSTORE: ${{ secrets.SIGNING_KEYSTORE }}
+          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          KEY_ALIAS: ethereal
         run: |
           # Ethereal: sign with the personal key when available so test builds install over releases.
           if [ -n "$KEYSTORE" ] && [ -n "$KEY_PASSWORD" ]; then

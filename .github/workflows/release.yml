@@ -127,9 +127,9 @@ jobs:
       - name: Check signing key
         if: steps.version.outputs.skip == 'false'
         env:
-          KEYSTORE: ${{ secrets.SIGNING_KEYSTORE || secrets.REELROOM_KEYSTORE }}
-          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD || secrets.REELROOM_KEY_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.SIGNING_KEYSTORE && 'ethereal' || 'reelroom' }}
+          KEYSTORE: ${{ secrets.SIGNING_KEYSTORE }}
+          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          KEY_ALIAS: ethereal
         run: |
           if [ -z "$KEYSTORE" ] || [ -z "$KEY_PASSWORD" ]; then
             echo "::error::Add the SIGNING_KEYSTORE and SIGNING_KEY_PASSWORD secrets (Settings > Secrets and variables > Actions)."
@@ -146,9 +146,9 @@ jobs:
       - name: Build
         if: steps.version.outputs.skip == 'false'
         env:
-          KEYSTORE: ${{ secrets.SIGNING_KEYSTORE || secrets.REELROOM_KEYSTORE }}
-          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD || secrets.REELROOM_KEY_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.SIGNING_KEYSTORE && 'ethereal' || 'reelroom' }}
+          KEYSTORE: ${{ secrets.SIGNING_KEYSTORE }}
+          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          KEY_ALIAS: ethereal
           VERSION: ${{ steps.version.outputs.version }}
           VERSION_CODE: ${{ steps.version.outputs.code }}
         run: |
