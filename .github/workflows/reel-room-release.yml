@@ -8,6 +8,11 @@ on:
   schedule:
     - cron: "0 18 * * 0"
   workflow_dispatch:
+    inputs:
+      force:
+        description: Publish a new release even if nothing changed (for testing the in-app updater)
+        type: boolean
+        default: false
   push:
     branches: [dev]
 
@@ -95,6 +100,7 @@ jobs:
         id: version
         env:
           GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
         run: |
           base=$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts | head -1)
           base_code=$(sed -n 's/^ *versionCode = \([0-9][0-9]*\)$/\1/p' app/build.gradle.kts | head -1)
@@ -105,7 +111,7 @@ jobs:
           last=$(printf '%s\n' "$tags" | sed -n "s/^v$(printf '%s' "$base" | sed 's/[.]/\\./g')\\.\([0-9][0-9]*\)$/\1/p" | sort -n | tail -1)
           if [ -n "$last" ]; then
             built_sha=$(gh release view "v$base.$last" --json body --jq .body | sed -n 's/^Built from commit //p' | head -1)
-            if [ "$built_sha" = "$(git rev-parse HEAD)" ]; then
+            if [ "$built_sha" = "$(git rev-parse HEAD)" ] && [ "$FORCE" != "true" ]; then
               echo "Release v$base.$last already has this commit; nothing to publish."
               echo "skip=true" >> "$GITHUB_OUTPUT"
               exit 0
