@@ -57,7 +57,8 @@ class UpdateViewModel @Inject constructor(
                     updateChannel = channel
                 )
             }
-            if (enabled && !BuildConfig.IS_DEBUG_BUILD) {
+            // Reel Room: releases are debug builds, so the launch check must not skip debug builds.
+            if (enabled) {
                 checkForUpdates(force = false, showNoUpdateFeedback = false)
             }
         }
@@ -185,7 +186,7 @@ class UpdateViewModel @Inject constructor(
         }
         viewModelScope.launch {
             updatePreferences.setUpdateBannerEnabled(enabled)
-            if (enabled && changed && !BuildConfig.IS_DEBUG_BUILD) {
+            if (enabled && changed) {
                 checkForUpdates(force = false, showNoUpdateFeedback = false)
             }
         }
@@ -214,9 +215,7 @@ class UpdateViewModel @Inject constructor(
         }
         viewModelScope.launch {
             updatePreferences.setUpdateChannel(channel)
-            if (!BuildConfig.IS_DEBUG_BUILD) {
-                checkForUpdates(force = true, showNoUpdateFeedback = false)
-            }
+            checkForUpdates(force = true, showNoUpdateFeedback = false)
         }
     }
 
