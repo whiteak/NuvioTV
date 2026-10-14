@@ -179,10 +179,11 @@ jobs:
           cp "$RUNNER_TEMP/Requiem.apk" "Requiem-TV-${VERSION}.apk"
           # Release notes: Nuvio's own notes for the version this build is based on, then this build's details.
           upstream_notes=""
-          for tag in "v${BASE}" "${BASE}"; do
-            upstream_notes=$(gh api "repos/${UPSTREAM_REPO}/releases/tags/${tag}" --jq '.body // ""' 2>/dev/null) || upstream_notes=""
-            [ -n "$upstream_notes" ] && break
-          done
+          releases=$(gh api "repos/${UPSTREAM_REPO}/releases?per_page=50" 2>/dev/null || echo '[]')
+          echo "Recent Nuvio releases: $(printf '%s' "$releases" | jq -r '[.[:5][] | .tag_name] | join(", ")')"
+          # Match the version as a whole number anywhere in the tag or title (v0.5.10, mobile-0.5.10, "Nuvio 0.5.10").
+          pattern="(^|[^0-9.])$(printf '%s' "$BASE" | sed 's/[.]/\\./g')([^0-9.]|$)"
+          upstream_notes=$(printf '%s' "$releases" | jq -r --arg p "$pattern" '[.[] | select(((.tag_name // "") + " " + (.name // "")) | test($p))][0].body // ""')
           if [ -n "$upstream_notes" ]; then echo "Using Nuvio ${BASE} release notes."; else echo "No Nuvio release notes found for ${BASE}."; fi
           {
             if [ -n "$upstream_notes" ]; then printf '%s\n\n---\n\n' "$upstream_notes"; fi
