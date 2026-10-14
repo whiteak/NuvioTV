@@ -1,0 +1,42 @@
+name: Remove the old app name from GitHub
+
+# One-off: removes leftovers of the app's old name from releases, branches and the rebrand PR.
+# Runs once when pushed; the file is deleted afterwards.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev]
+    paths: [.github/workflows/tidy-old-name.yml]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  tidy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tidy releases, branches and the rebrand PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api "repos/$REPO/releases?per_page=100" --jq '.[].id' | while read -r id; do
+            gh api "repos/$REPO/releases/$id" --jq '.assets[] | select(.name | startswith("ReelRoom-")) | .id' | while read -r asset; do
+              gh api -X DELETE "repos/$REPO/releases/assets/$asset" && echo "Deleted asset $asset"
+            done
+            body=$(gh api "repos/$REPO/releases/$id" --jq .body)
+            new=$(printf '%s' "$body" | sed 's/Ethereal-\* is Ethereal (ReelRoom-\* is the same file under its old name); /Ethereal-* is Ethereal; /; s/Reel Room/Ethereal/g')
+            if [ "$new" != "$body" ]; then
+              gh api -X PATCH "repos/$REPO/releases/$id" -f body="$new" >/dev/null && echo "Updated notes of release $id"
+            fi
+          done
+          git ls-remote --exit-code "https://x-access-token:${GH_TOKEN}@github.com/$REPO.git" refs/heads/reel-room-branding >/dev/null 2>&1 \
+            && gh api -X DELETE "repos/$REPO/git/refs/heads/reel-room-branding" && echo "Deleted branch reel-room-branding" || true
+          title=$(gh api "repos/$REPO/pulls/2" --jq .title 2>/dev/null || true)
+          if printf '%s' "$title" | grep -q "Reel Room"; then
+            body=$(gh api "repos/$REPO/pulls/2" --jq .body)
+            gh api -X PATCH "repos/$REPO/pulls/2" -f title="Rebrand as Ethereal" -f body="$(printf '%s' "$body" | sed 's/Reel Room/Ethereal/g')" >/dev/null && echo "Renamed PR 2"
+          fi
