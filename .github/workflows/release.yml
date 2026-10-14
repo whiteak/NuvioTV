@@ -1,7 +1,7 @@
-name: Reel Room sync and release
+name: Sync and release Ethereal and Requiem
 
-# Weekly: merge the latest upstream Nuvio code into this fork (keeping the Reel Room
-# customisations), then build and publish a Reel Room release that the in-app updater picks up.
+# Weekly: merge the latest upstream Nuvio code into this fork (keeping the Ethereal and Requiem
+# customisations), then build and publish a release that the in-app updater picks up.
 # Also runs on pushes to the default branch. Each release gets the next build number.
 
 on:
@@ -21,7 +21,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: reel-room-release
+  group: release
   cancel-in-progress: false
 
 env:
@@ -43,7 +43,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git config user.name "reel-room-bot"
+          git config user.name "ethereal-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
           git fetch --no-tags upstream "${BRANCH}"
@@ -60,7 +60,7 @@ jobs:
           git checkout HEAD -- .github/workflows
           git add -A .github/workflows
 
-          # Keep Reel Room branding images when upstream changed the same files.
+          # Keep Ethereal and Requiem branding images when upstream changed the same files.
           unresolved=""
           for f in $(git diff --name-only --diff-filter=U); do
             case "$f" in
@@ -77,8 +77,8 @@ jobs:
 
           if [ -n "$unresolved" ]; then
             git merge --abort
-            body=$(printf 'The weekly sync with %s conflicts with Reel Room changes in:\n\n%s\n\nNothing was changed. Ask Claude in the Reel Room thread to resolve it.' "$UPSTREAM_REPO" "$unresolved")
-            gh issue create --title "Reel Room: upstream sync needs attention" --body "$body" || true
+            body=$(printf 'The weekly sync with %s conflicts with Ethereal changes in:\n\n%s\n\nNothing was changed. Ask Claude to resolve it.' "$UPSTREAM_REPO" "$unresolved")
+            gh issue create --title "Ethereal: upstream sync needs attention" --body "$body" || true
             echo "::error::Merge conflicts in:${unresolved}"
             exit 1
           fi
@@ -127,11 +127,12 @@ jobs:
       - name: Check signing key
         if: steps.version.outputs.skip == 'false'
         env:
-          KEYSTORE: ${{ secrets.REELROOM_KEYSTORE }}
-          KEY_PASSWORD: ${{ secrets.REELROOM_KEY_PASSWORD }}
+          KEYSTORE: ${{ secrets.SIGNING_KEYSTORE || secrets.REELROOM_KEYSTORE }}
+          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD || secrets.REELROOM_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SIGNING_KEYSTORE && 'ethereal' || 'reelroom' }}
         run: |
           if [ -z "$KEYSTORE" ] || [ -z "$KEY_PASSWORD" ]; then
-            echo "::error::Add the REELROOM_KEYSTORE and REELROOM_KEY_PASSWORD secrets (Settings > Secrets and variables > Actions)."
+            echo "::error::Add the SIGNING_KEYSTORE and SIGNING_KEY_PASSWORD secrets (Settings > Secrets and variables > Actions)."
             exit 1
           fi
 
@@ -145,22 +146,23 @@ jobs:
       - name: Build
         if: steps.version.outputs.skip == 'false'
         env:
-          KEYSTORE: ${{ secrets.REELROOM_KEYSTORE }}
-          KEY_PASSWORD: ${{ secrets.REELROOM_KEY_PASSWORD }}
+          KEYSTORE: ${{ secrets.SIGNING_KEYSTORE || secrets.REELROOM_KEYSTORE }}
+          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD || secrets.REELROOM_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SIGNING_KEYSTORE && 'ethereal' || 'reelroom' }}
           VERSION: ${{ steps.version.outputs.version }}
           VERSION_CODE: ${{ steps.version.outputs.code }}
         run: |
           sed -i "s/^\( *versionName = \)\".*\"/\1\"$VERSION\"/; s/^\( *versionCode = \)[0-9][0-9]*$/\1$VERSION_CODE/" app/build.gradle.kts
           grep -q "versionName = \"$VERSION\"" app/build.gradle.kts
-          printf '%s' "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/reelroom.jks"
+          printf '%s' "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/signing.jks"
           touch local.properties local.dev.properties
-          NUVIO_RELEASE_STORE_FILE="$RUNNER_TEMP/reelroom.jks" NUVIO_RELEASE_KEY_ALIAS=reelroom \
+          NUVIO_RELEASE_STORE_FILE="$RUNNER_TEMP/signing.jks" NUVIO_RELEASE_KEY_ALIAS=$KEY_ALIAS \
           NUVIO_RELEASE_KEY_PASSWORD="$KEY_PASSWORD" NUVIO_RELEASE_STORE_PASSWORD="$KEY_PASSWORD" \
             ./gradlew :app:assembleFullDebug --stacktrace
-          cp "app/build/outputs/apk/full/debug/app-full-universal-debug.apk" "$RUNNER_TEMP/ReelRoom.apk"
+          cp "app/build/outputs/apk/full/debug/app-full-universal-debug.apk" "$RUNNER_TEMP/Ethereal.apk"
           # Requiem: the same app with its own name, artwork and app ID, so it installs alongside.
           bash editions/requiem/apply.sh
-          NUVIO_RELEASE_STORE_FILE="$RUNNER_TEMP/reelroom.jks" NUVIO_RELEASE_KEY_ALIAS=reelroom \
+          NUVIO_RELEASE_STORE_FILE="$RUNNER_TEMP/signing.jks" NUVIO_RELEASE_KEY_ALIAS=$KEY_ALIAS \
           NUVIO_RELEASE_KEY_PASSWORD="$KEY_PASSWORD" NUVIO_RELEASE_STORE_PASSWORD="$KEY_PASSWORD" \
             ./gradlew :app:assembleFullDebug --stacktrace
           cp "app/build/outputs/apk/full/debug/app-full-universal-debug.apk" "$RUNNER_TEMP/Requiem.apk"
@@ -173,15 +175,23 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           BASE: ${{ steps.version.outputs.base }}
         run: |
-          cp "$RUNNER_TEMP/ReelRoom.apk" "Ethereal-TV-${VERSION}.apk"
-          # Same APK under the old name, so installs from before the rename still find their updates.
-          cp "$RUNNER_TEMP/ReelRoom.apk" "ReelRoom-TV-${VERSION}.apk"
+          cp "$RUNNER_TEMP/Ethereal.apk" "Ethereal-TV-${VERSION}.apk"
           cp "$RUNNER_TEMP/Requiem.apk" "Requiem-TV-${VERSION}.apk"
-          NOTES=$(printf 'Ethereal %s, built on Nuvio %s from %s.\n\nEthereal-* is Ethereal (ReelRoom-* is the same file under its old name); Requiem-* is the Requiem edition.\n\nBuilt from commit %s' "$VERSION" "$BASE" "$UPSTREAM_REPO" "$(git rev-parse HEAD)")
+          # Release notes: Nuvio's own notes for the version this build is based on, then this build's details.
+          upstream_notes=""
+          for tag in "v${BASE}" "${BASE}"; do
+            upstream_notes=$(gh api "repos/${UPSTREAM_REPO}/releases/tags/${tag}" --jq '.body // ""' 2>/dev/null) || upstream_notes=""
+            [ -n "$upstream_notes" ] && break
+          done
+          if [ -n "$upstream_notes" ]; then echo "Using Nuvio ${BASE} release notes."; else echo "No Nuvio release notes found for ${BASE}."; fi
+          {
+            if [ -n "$upstream_notes" ]; then printf '%s\n\n---\n\n' "$upstream_notes"; fi
+            printf 'Ethereal %s, built on Nuvio %s.\n\nEthereal-* is Ethereal; Requiem-* is the Requiem edition.\n\nBuilt from commit %s\n' "$VERSION" "$BASE" "$(git rev-parse HEAD)"
+          } > "$RUNNER_TEMP/notes.md"
           prerelease=""
           case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
-          gh release create "v${VERSION}" "Ethereal-TV-${VERSION}.apk" "Requiem-TV-${VERSION}.apk" "ReelRoom-TV-${VERSION}.apk" \
+          gh release create "v${VERSION}" "Ethereal-TV-${VERSION}.apk" "Requiem-TV-${VERSION}.apk" \
             --target "$(git rev-parse HEAD)" \
             --title "Ethereal ${VERSION}" \
-            --notes "$NOTES" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
             $prerelease

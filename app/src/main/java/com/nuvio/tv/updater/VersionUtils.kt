@@ -5,7 +5,7 @@ internal data class SemanticVersion(
     val minor: Long,
     val patch: Long,
     val prerelease: List<String>,
-    // Reel Room: optional fourth number (0.5.9.3) that numbers this fork's own builds of one upstream version.
+    // Ethereal: optional fourth number (0.5.9.3) that numbers this fork's own builds of one upstream version.
     val build: Long = 0,
 ) : Comparable<SemanticVersion> {
     override fun compareTo(other: SemanticVersion): Int {

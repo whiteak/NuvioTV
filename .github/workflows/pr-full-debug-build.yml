@@ -48,13 +48,14 @@ jobs:
 
       - name: Prepare CI signing config
         env:
-          KEYSTORE: ${{ secrets.REELROOM_KEYSTORE }}
-          KEY_PASSWORD: ${{ secrets.REELROOM_KEY_PASSWORD }}
+          KEYSTORE: ${{ secrets.SIGNING_KEYSTORE || secrets.REELROOM_KEYSTORE }}
+          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD || secrets.REELROOM_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SIGNING_KEYSTORE && 'ethereal' || 'reelroom' }}
         run: |
-          # Reel Room: sign with the personal key when available so test builds install over releases.
+          # Ethereal: sign with the personal key when available so test builds install over releases.
           if [ -n "$KEYSTORE" ] && [ -n "$KEY_PASSWORD" ]; then
             printf '%s' "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/ci-debug.jks"
-            alias=reelroom
+            alias="$KEY_ALIAS"
             password="$KEY_PASSWORD"
           else
             keytool -genkeypair \

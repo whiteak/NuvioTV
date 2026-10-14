@@ -1,6 +1,6 @@
 package com.nuvio.tv.domain.model
 
-// Reel Room: the theme an edition opens in until a theme is picked in Settings (Requiem sets WHITE).
+// Ethereal: the theme an edition opens in until a theme is picked in Settings (Requiem sets WHITE).
 val EDITION_DEFAULT_THEME = AppTheme.VIOLET
 
 enum class AppTheme(val displayName: String) {

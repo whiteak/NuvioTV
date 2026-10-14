@@ -57,7 +57,7 @@ class UpdateViewModel @Inject constructor(
                     updateChannel = channel
                 )
             }
-            // Reel Room: releases are debug builds, so the launch check must not skip debug builds.
+            // Ethereal: releases are debug builds, so the launch check must not skip debug builds.
             if (enabled) {
                 checkForUpdates(force = false, showNoUpdateFeedback = false)
             }

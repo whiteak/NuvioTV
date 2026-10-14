@@ -45,7 +45,7 @@ object ThemeColors {
         backgroundCard = Color(0xFF1A1F24)
     )
 
-    // Reel Room: the Violet slot is restyled as the Ethereal theme (twilight violet with opal highlights).
+    // Ethereal: the Violet slot is restyled as the Ethereal theme (twilight violet with opal highlights).
     val Violet = ThemeColorPalette(
         secondary = Color(0xFFB9A6FF),
         secondaryVariant = Color(0xFF7D63D9),
