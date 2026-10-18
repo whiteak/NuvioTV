@@ -30,8 +30,8 @@ internal const val AUDIO_AMPLIFICATION_MIN_DB = 0
 internal const val AUDIO_AMPLIFICATION_MAX_DB = 10
 internal const val CENTER_MIX_LEVEL_MIN_DB = -10
 internal const val CENTER_MIX_LEVEL_MAX_DB = 30
-internal const val AUDIO_DELAY_MIN_MS = -60000
-internal const val AUDIO_DELAY_MAX_MS = 60000
+internal const val AUDIO_DELAY_MIN_MS = com.nuvio.tv.domain.model.AUDIO_DELAY_MIN_MS
+internal const val AUDIO_DELAY_MAX_MS = com.nuvio.tv.domain.model.AUDIO_DELAY_MAX_MS
 internal const val AUDIO_DELAY_STEP_MS = 25
 internal const val AUDIO_DELAY_HOLD_STEP_MS = 50
 internal const val AUDIO_DELAY_HOLD_FAST_STEP_MS = 100
@@ -40,19 +40,65 @@ internal const val AUDIO_DELAY_HOLD_FAST_THRESHOLD_MS = 2000L
 internal const val AUDIO_DELAY_HOLD_REPEAT_INTERVAL_MS = 100L
 internal const val WATCH_PROGRESS_SAVE_INTERVAL_MS = 90_000L
 
-internal fun PlayerRuntimeController.applyAudioDelay(
-    delayMs: Int,
-    persistForCurrentRoute: Boolean = true
+/**
+ * Audio delay split into its sources, so the stream hint and the user's tweak on that stream
+ * never end up in the per-device delay. The player always gets [totalMs].
+ */
+internal data class AudioDelayParts(
+    /** Per-device delay (stored per route when "remember per device" is on). */
+    val deviceMs: Int = 0,
+    /** `behaviorHints.audioDelayMs` of the current stream. */
+    val streamMs: Int = 0,
+    /** User adjustment made while a stream delay is active; never persisted, dropped on stream change. */
+    val sessionAdjustMs: Int = 0
 ) {
-    val clampedDelayMs = delayMs.coerceIn(AUDIO_DELAY_MIN_MS, AUDIO_DELAY_MAX_MS)
-    audioDelayUs.set(clampedDelayMs.toLong() * 1000L)
-    _uiState.update { it.copy(audioDelayMs = clampedDelayMs) }
+    val totalMs: Int
+        get() = (deviceMs.toLong() + streamMs + sessionAdjustMs)
+            .coerceIn(AUDIO_DELAY_MIN_MS.toLong(), AUDIO_DELAY_MAX_MS.toLong())
+            .toInt()
+
+    /** Value to save for the current route, or null while a stream delay is active. */
+    val persistableDeviceMs: Int?
+        get() = deviceMs.takeIf { streamMs == 0 }
+
+    /** The user picked [totalMs] in the Audio panel. */
+    fun withManualTotal(totalMs: Int): AudioDelayParts {
+        val clampedTotalMs = totalMs.coerceIn(AUDIO_DELAY_MIN_MS, AUDIO_DELAY_MAX_MS)
+        return if (streamMs == 0) {
+            copy(deviceMs = clampedTotalMs, sessionAdjustMs = 0)
+        } else {
+            copy(sessionAdjustMs = clampedTotalMs - deviceMs - streamMs)
+        }
+    }
+
+    fun withStream(streamMs: Int): AudioDelayParts =
+        copy(streamMs = streamMs.coerceIn(AUDIO_DELAY_MIN_MS, AUDIO_DELAY_MAX_MS), sessionAdjustMs = 0)
+
+    fun withDevice(deviceMs: Int): AudioDelayParts =
+        copy(deviceMs = deviceMs.coerceIn(AUDIO_DELAY_MIN_MS, AUDIO_DELAY_MAX_MS))
+}
+
+/** Audio panel change: [delayMs] is the new total delay shown to the user. */
+internal fun PlayerRuntimeController.applyAudioDelay(delayMs: Int) {
+    audioDelayParts = audioDelayParts.withManualTotal(delayMs)
+    applyEffectiveAudioDelay()
+    audioDelayParts.persistableDeviceMs?.let { persistAudioDelayForCurrentRoute(it) }
+}
+
+/** Pushes the current total delay to the UI state and the active engine. */
+internal fun PlayerRuntimeController.applyEffectiveAudioDelay() {
+    val totalMs = audioDelayParts.totalMs
+    audioDelayUs.set(totalMs.toLong() * 1000L)
+    _uiState.update { it.copy(audioDelayMs = totalMs) }
     if (isUsingMpvEngine()) {
-        mpvView?.setAudioDelayMs(clampedDelayMs)
+        mpvView?.setAudioDelayMs(totalMs)
     }
-    if (persistForCurrentRoute) {
-        persistAudioDelayForCurrentRoute(clampedDelayMs)
-    }
+}
+
+/** A new stream was selected: swap in its delay hint and drop the tweak made on the previous one. */
+internal fun PlayerRuntimeController.applyStreamAudioDelay(streamDelayMs: Int?) {
+    audioDelayParts = audioDelayParts.withStream(streamDelayMs ?: 0)
+    applyEffectiveAudioDelay()
 }
 
 internal fun PlayerRuntimeController.skipActiveInterval(): Boolean {
@@ -72,8 +118,11 @@ internal fun PlayerRuntimeController.skipInterval(interval: SkipInterval): Boole
     val seekParameters = if (postCredits != null || interval.type == "movie-credits") {
         SeekParameters.EXACT
     } else SeekParameters.NEXT_SYNC
-    seekPlaybackTo(seekMs.coerceAtMost(duration), seekParameters)
+    val requested = seekMs.coerceAtMost(duration)
+    val target = if (isPartyControlLocked) ownSeekTarget(requested) ?: return false else requested
+    seekPlaybackTo(target, seekParameters)
     scheduleProgressSyncAfterSeek()
+    publishPartyPlayback(positionMs = target)
     _uiState.update { it.copy(activeSkipInterval = null, skipIntervalDismissed = true) }
     return true
 }
@@ -268,7 +317,7 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                             playbackEnded = naturalEnded
                         )
                     }
-                    updateMpvAvailableTracks()
+                    updateMpvTracksOnTick()
                     updateActiveSkipInterval(pos)
                     if (!_playbackTimeline.value.isLive) {
                         evaluatePostPlayOverlayVisibility(
@@ -569,7 +618,7 @@ private fun PlayerRuntimeController.buildPlaybackIssuePlaybackSettingsInput(): P
         useParallelConnections = settings.useParallelConnections,
         parallelConnectionCount = settings.parallelConnectionCount,
         parallelChunkSizeKb = settings.parallelChunkSizeKb,
-        enableHttp2 = settings.enableHttp2,
+        enableHttp2 = false,
         nuvioPerformanceModeEnabled = settings.nuvioPerformanceModeEnabled,
         streamAutoPlayMode = settings.streamAutoPlayMode.name,
         streamAutoPlaySource = settings.streamAutoPlaySource.name,
@@ -1038,6 +1087,7 @@ fun PlayerRuntimeController.scheduleHideControls() {
             !_uiState.value.showSubtitleDelayOverlay &&
             !_uiState.value.showSubtitleTimingDialog &&
             !_uiState.value.showEpisodesPanel && !_uiState.value.showSourcesPanel &&
+            !_uiState.value.showPartyPanel &&
             !_uiState.value.showStreamInfoOverlay) {
             _uiState.update { it.copy(showControls = false) }
         }
@@ -1143,7 +1193,7 @@ internal fun PlayerRuntimeController.schedulePauseOverlay() {
         val anyPanelOpen = s.showSubtitleOverlay || s.showSubtitleStylePanel ||
             s.showSpeedDialog || s.showMoreDialog || s.showEpisodesPanel ||
             s.showSourcesPanel || s.showAudioOverlay || s.showStreamInfoOverlay ||
-            s.showSubtitleTimingDialog || s.showSubtitleDelayOverlay
+            s.showSubtitleTimingDialog || s.showSubtitleDelayOverlay || s.showPartyPanel
         if (!s.isPlaying && s.pauseOverlayEnabled && s.error == null && !anyPanelOpen) {
             _uiState.update { it.copy(showPauseOverlay = true, showControls = false) }
         }
@@ -1176,6 +1226,10 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
     }
     when (event) {
         PlayerEvent.OnPlayPause -> {
+            if (isPartyControlLocked) {
+                toggleOwnPlayback()
+                return
+            }
             if (isUsingMpvEngine()) {
                 val playing = isPlaybackCurrentlyPlaying()
                 if (playing) {
@@ -1194,6 +1248,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                     scheduleHideControls()
                     emitScrobbleStart()
                 }
+                publishPartyPlayback(paused = playing)
             } else {
                 _exoPlayer?.let { player ->
                     if (player.isPlaying) {
@@ -1205,6 +1260,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                         cancelPauseOverlay()
                         player.play()
                     }
+                    publishPartyPlayback(paused = !player.playWhenReady)
                 }
             }
             showControlsTemporarily()
@@ -1222,9 +1278,10 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             pendingPreviewSeekPosition = null
             val current = currentPlaybackPositionMs() ?: 0L
             val maxDuration = currentPlaybackDurationMs().takeIf { it >= 0 } ?: Long.MAX_VALUE
-            val target = (current + event.deltaMs)
+            val requested = (current + event.deltaMs)
                 .coerceAtLeast(0L)
                 .coerceAtMost(maxDuration)
+            val target = if (isPartyControlLocked) ownSeekTarget(requested) ?: return else requested
             val seekParameters = if (event.deltaMs < 0L) {
                 SeekParameters.PREVIOUS_SYNC
             } else {
@@ -1233,6 +1290,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             seekPlaybackTo(target, seekParameters)
             updatePlaybackTimeline(currentPosition = target)
             scheduleProgressSyncAfterSeek()
+            publishPartyPlayback(positionMs = target)
             if (_uiState.value.showControls) {
                 showControlsTemporarily()
             } else {
@@ -1256,12 +1314,19 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         }
         PlayerEvent.OnCommitPreviewSeek -> {
             if (_playbackTimeline.value.isLive) return
-            val target = pendingPreviewSeekPosition
-            if (target != null) {
+            val requested = pendingPreviewSeekPosition
+            if (requested != null) {
+                val target = if (isPartyControlLocked) ownSeekTarget(requested) else requested
+                if (target == null) {
+                    pendingPreviewSeekPosition = null
+                    updatePlaybackTimeline(currentPosition = currentPlaybackPositionMs() ?: 0L)
+                    return
+                }
                 seekPlaybackTo(target, SeekParameters.CLOSEST_SYNC)
                 updatePlaybackTimeline(currentPosition = target)
                 pendingPreviewSeekPosition = null
                 scheduleProgressSyncAfterSeek()
+                publishPartyPlayback(positionMs = target)
                 if (_uiState.value.showControls) {
                     showControlsTemporarily()
                 } else {
@@ -1272,9 +1337,11 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         is PlayerEvent.OnSeekTo -> {
             if (_playbackTimeline.value.isLive) return
             pendingPreviewSeekPosition = null
-            seekPlaybackTo(event.position, SeekParameters.CLOSEST_SYNC)
-            updatePlaybackTimeline(currentPosition = event.position)
+            val target = if (isPartyControlLocked) ownSeekTarget(event.position) ?: return else event.position
+            seekPlaybackTo(target, SeekParameters.CLOSEST_SYNC)
+            updatePlaybackTimeline(currentPosition = target)
             scheduleProgressSyncAfterSeek()
+            publishPartyPlayback(positionMs = target)
             if (_uiState.value.showControls) {
                 showControlsTemporarily()
             } else {
@@ -1408,6 +1475,8 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             }
         }
         is PlayerEvent.OnSetPlaybackSpeed -> {
+            if (partyBlocksControl()) return
+            partyRateNudge = null
             if (isUsingMpvEngine()) {
                 setPlaybackSpeedInternal(event.speed)
             } else {
@@ -1429,6 +1498,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             contentId?.takeIf { it.isNotBlank() }?.let { id ->
                 scope.launch { trackPreferenceDataStore.savePlaybackSpeed(id, event.speed) }
             }
+            publishPartyPlayback(rate = event.speed)
         }
         PlayerEvent.OnToggleControls -> {
             if (_uiState.value.showSubtitleTimingDialog) {
@@ -1599,6 +1669,12 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         }
         PlayerEvent.OnDismissSourcesPanel -> {
             dismissSourcesPanel()
+        }
+        PlayerEvent.OnShowPartyPanel -> {
+            showPartyPanel()
+        }
+        PlayerEvent.OnDismissPartyPanel -> {
+            dismissPartyPanel()
         }
         PlayerEvent.OnReloadSourceStreams -> {
             loadSourceStreams(forceRefresh = true)

@@ -209,6 +209,8 @@ internal fun PlayerRuntimeController.initializePlayer(
             if (rememberAudioDelayPerDeviceEnabled) {
                 applyStoredAudioDelayForCurrentRouteIfEnabled()
             }
+            // Re-apply on every (re)initialization without dropping the user's tweak on the current stream.
+            applyEffectiveAudioDelay()
             cachedDecoderPriority = playerSettings.decoderPriority
             val preferredAudioLanguages = resolvePreferredAudioLanguages(
                 preferredAudioLanguage = playerSettings.preferredAudioLanguage,
@@ -1540,21 +1542,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                             val audioRendererFailed = failingMime == null ||
                                 MimeTypes.isAudio(failingMime)
                             if (audioRendererFailed) {
-                                if (!isSafeAudioModeActiveForCurrentPlayback) {
-                                    safeAudioForcedStreamUrls.add(currentStreamUrl)
-                                    retryCurrentStreamWithSafeAudioFallback(currentPosition)
-                                    return
-                                }
-                                if (!hasTriedAudioPcmFallback) {
-                                    hasTriedAudioPcmFallback = true
-                                    retryCurrentStreamWithSafeAudioFallback(currentPosition)
-                                    return
-                                }
-                                if (!isAudioDisabledForCurrentPlayback) {
-                                    audioDisabledForcedStreamUrls.add(currentStreamUrl)
-                                    retryCurrentStreamWithAudioDisabled(currentPosition)
-                                    return
-                                }
+                                if (tryNextAudioFallbackStep(currentPosition)) return
                             }
                         }
 
@@ -1565,39 +1553,11 @@ internal fun PlayerRuntimeController.initializePlayer(
                         }
 
                         if (error.isAudioTrackFailure()) {
-                            if (!isSafeAudioModeActiveForCurrentPlayback) {
-                                safeAudioForcedStreamUrls.add(currentStreamUrl)
-                                retryCurrentStreamWithSafeAudioFallback(currentPosition)
-                                return
-                            }
-                            if (!hasTriedAudioPcmFallback) {
-                                hasTriedAudioPcmFallback = true
-                                retryCurrentStreamWithSafeAudioFallback(currentPosition)
-                                return
-                            }
-                            if (!isAudioDisabledForCurrentPlayback) {
-                                audioDisabledForcedStreamUrls.add(currentStreamUrl)
-                                retryCurrentStreamWithAudioDisabled(currentPosition)
-                                return
-                            }
+                            if (tryNextAudioFallbackStep(currentPosition)) return
                         }
 
                         if (error.isStuckPlayingNoProgress()) {
-                            if (!isSafeAudioModeActiveForCurrentPlayback) {
-                                safeAudioForcedStreamUrls.add(currentStreamUrl)
-                                retryCurrentStreamWithSafeAudioFallback(currentPosition)
-                                return
-                            }
-                            if (!hasTriedAudioPcmFallback) {
-                                hasTriedAudioPcmFallback = true
-                                retryCurrentStreamWithSafeAudioFallback(currentPosition)
-                                return
-                            }
-                            if (!isAudioDisabledForCurrentPlayback) {
-                                audioDisabledForcedStreamUrls.add(currentStreamUrl)
-                                retryCurrentStreamWithAudioDisabled(currentPosition)
-                                return
-                            }
+                            if (tryNextAudioFallbackStep(currentPosition)) return
                         }
 
                         val timeoutError = error.findCause<SocketTimeoutException>()
@@ -2423,7 +2383,7 @@ private class CueNormalizingTextOutput(
         var processed = SubtitleMojibakeSanitizer.sanitizeCue(cue)
         processed = PlayerSubtitleRtlFix.fixCueText(processed, isBuiltInSubtitleProvider())
         if (shouldNormalizeCuePositionProvider()) {
-            processed = normalizeCuePosition(processed)
+            processed = PlayerSubtitleUtils.normalizeBottomCuePosition(processed)
         }
         if (processed.bitmap != null) {
             val bounds = videoBoundsFractionProvider()
@@ -2453,16 +2413,6 @@ private class CueNormalizingTextOutput(
             builder.setBitmapHeight(cue.bitmapHeight * bounds.height())
         }
         return builder.build()
-    }
-
-    private fun normalizeCuePosition(cue: Cue): Cue {
-        if (cue.bitmap != null || cue.verticalType != Cue.TYPE_UNSET || cue.line == Cue.DIMEN_UNSET) {
-            return cue
-        }
-        return cue.buildUpon()
-            .setLine(Cue.DIMEN_UNSET, Cue.TYPE_UNSET)
-            .setLineAnchor(Cue.TYPE_UNSET)
-            .build()
     }
 }
 

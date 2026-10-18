@@ -23,6 +23,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.nuvio.tv.core.build.AppFeaturePolicy
+import com.nuvio.tv.core.party.PartyMedia
 import com.nuvio.tv.domain.model.ExperienceMode
 import com.nuvio.tv.data.mediaserver.ServerCatalog
 import com.nuvio.tv.ui.screens.CatalogSeeAllScreen
@@ -37,6 +38,7 @@ import com.nuvio.tv.ui.screens.player.PlayerExitReason
 import com.nuvio.tv.ui.screens.player.PlayerScreen
 import com.nuvio.tv.ui.screens.player.PostPlayRecommendation
 import com.nuvio.tv.ui.screens.player.playerBackOpensCurrentEpisodeStreams
+import com.nuvio.tv.ui.screens.party.PartyScreen
 import com.nuvio.tv.ui.screens.plugin.PluginScreen
 import com.nuvio.tv.ui.screens.search.DiscoverScreen
 import com.nuvio.tv.ui.screens.search.SearchScreen
@@ -83,6 +85,26 @@ private fun PlaybackNavHost(
 
     fun isPlayerToStream(from: String, to: String): Boolean {
         return from.startsWith("player/") && to.startsWith("stream/")
+    }
+
+    fun openPartyMedia(media: PartyMedia) {
+        if (navController.currentDestination?.route?.startsWith("player/") == true) navController.popBackStack()
+        navController.navigate(
+            Screen.Stream.createRoute(
+                videoId = media.videoId ?: media.metaId,
+                contentType = media.type,
+                title = media.title,
+                poster = media.poster,
+                backdrop = media.background,
+                logo = media.logo,
+                season = media.season,
+                episode = media.episode,
+                episodeName = media.episodeTitle,
+                contentId = media.metaId,
+                contentName = media.title,
+                manualSelection = true
+            )
+        )
     }
 
     NavHost(
@@ -615,7 +637,8 @@ private fun PlaybackNavHost(
                                 fileIdx = playbackInfo.fileIdx,
                                 sources = playbackInfo.sources,
                                 contentLanguage = playbackInfo.contentLanguage,
-                                profileId = playbackInfo.profileId
+                                profileId = playbackInfo.profileId,
+                                audioDelayMs = playbackInfo.audioDelayMs
                             )
                         )
                     }
@@ -656,7 +679,8 @@ private fun PlaybackNavHost(
                                 fileIdx = playbackInfo.fileIdx,
                                 sources = playbackInfo.sources,
                                 contentLanguage = playbackInfo.contentLanguage,
-                                profileId = playbackInfo.profileId
+                                profileId = playbackInfo.profileId,
+                                audioDelayMs = playbackInfo.audioDelayMs
                             )
                         ) {
                             popUpTo(Screen.Stream.route) { inclusive = true }
@@ -807,6 +831,11 @@ private fun PlaybackNavHost(
                     defaultValue = null
                 },
                 navArgument("profileId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("audioDelayMs") {
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null
@@ -1080,6 +1109,7 @@ private fun PlaybackNavHost(
                         playOnLoad = false
                     )
                 },
+                onOpenPartyMedia = ::openPartyMedia,
                 onPlaybackErrorBack = {
                     val returnedToStream = popBackToStream()
                     if (!returnedToStream) {
@@ -1211,7 +1241,24 @@ private fun PlaybackNavHost(
                 },
                 onNavigateToLicensesAttributions = {
                     navController.navigate(Screen.LicensesAttributions.route)
+                },
+                onNavigateToWatchParty = { navController.navigate(Screen.WatchParty.createRoute()) }
+            )
+        }
+
+        composable(
+            route = Screen.WatchParty.route,
+            arguments = listOf(
+                navArgument("code") {
+                    type = NavType.StringType
+                    defaultValue = ""
                 }
+            )
+        ) { backStackEntry ->
+            PartyScreen(
+                initialCode = backStackEntry.arguments?.getString("code").orEmpty(),
+                onBackPress = { navController.popBackStack() },
+                onWatch = ::openPartyMedia
             )
         }
 
