@@ -108,6 +108,7 @@ import com.nuvio.tv.R
 import com.nuvio.tv.core.sync.SetProfilePinResult
 import com.nuvio.tv.data.remote.supabase.AvatarCatalogItem
 import com.nuvio.tv.data.remote.supabase.ProfileBackgroundCatalogItem
+import com.nuvio.tv.data.remote.supabase.editionAvatarForUrl
 import com.nuvio.tv.domain.model.UserProfile
 import com.nuvio.tv.ui.components.AvatarPickerGrid
 import com.nuvio.tv.ui.components.CustomProfileBackgroundImage
@@ -1742,8 +1743,9 @@ private fun EditProfileOverlay(
 
     var profileName by remember { mutableStateOf(profile.name) }
     var selectedColorHex by remember { mutableStateOf(profile.avatarColorHex) }
-    var selectedAvatarId by remember(profile.id, profile.avatarId) {
-        mutableStateOf(profile.avatarId)
+    val initialAvatarId = profile.avatarId ?: editionAvatarForUrl(profile.avatarUrl)?.id
+    var selectedAvatarId by remember(profile.id, initialAvatarId) {
+        mutableStateOf(initialAvatarId)
     }
     var selectedBackgroundId by remember(profile.id, profile.profileBackgroundId) {
         mutableStateOf(profile.profileBackgroundId)
@@ -1756,7 +1758,7 @@ private fun EditProfileOverlay(
     val selectedAvatar = remember(avatarCatalog, selectedAvatarId) {
         avatarCatalog.find { it.id == selectedAvatarId }
     }
-    val hasChangedAvatarSelection = selectedAvatarId != profile.avatarId
+    val hasChangedAvatarSelection = selectedAvatarId != initialAvatarId
     val previewAvatarImageUrl = when {
         selectedAvatar != null -> selectedAvatar.imageUrl
         !hasChangedAvatarSelection -> profile.avatarUrl?.takeIf { it.isNotBlank() }
