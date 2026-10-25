@@ -6,6 +6,7 @@ import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.data.local.ProfileDataStore
 import com.nuvio.tv.data.remote.supabase.SupabaseProfileLockState
+import com.nuvio.tv.data.remote.supabase.editionAvatar
 import com.nuvio.tv.data.remote.supabase.SupabaseProfile
 import com.nuvio.tv.data.remote.supabase.SupabaseProfilePinVerifyResult
 import com.nuvio.tv.domain.model.UserProfile
@@ -72,14 +73,15 @@ class ProfileSyncService @Inject constructor(
                 put("p_client_max_profiles", ProfileManager.MAX_PROFILES)
                 put("p_profiles", buildJsonArray {
                     profiles.forEach { profile ->
+                        val editionAvatarUrl = editionAvatar(profile.avatarId)?.imageUrl
                         addJsonObject {
                             put("profile_index", profile.id)
                             put("name", profile.name)
                             put("avatar_color_hex", profile.avatarColorHex)
                             put("uses_primary_addons", profile.usesPrimaryAddons)
                             put("uses_primary_plugins", profile.usesPrimaryPlugins)
-                            put("avatar_id", if (profile.avatarUrl.isNullOrBlank()) profile.avatarId else null)
-                            put("avatar_url", profile.avatarUrl?.takeIf { it.isNotBlank() })
+                            put("avatar_id", if (profile.avatarUrl.isNullOrBlank() && editionAvatarUrl == null) profile.avatarId else null)
+                            put("avatar_url", profile.avatarUrl?.takeIf { it.isNotBlank() } ?: editionAvatarUrl)
                             put("profile_background_id", profile.profileBackgroundId)
                             put("profile_background_url", profile.profileBackgroundUrl?.takeIf { it.isNotBlank() })
                         }

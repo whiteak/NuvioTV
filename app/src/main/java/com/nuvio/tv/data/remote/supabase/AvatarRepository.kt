@@ -90,11 +90,11 @@ class AvatarRepository @Inject constructor(
         val hadStandardCache = cachedStandardCatalog != null
         val standardCatalog = getStandardAvatarCatalog()
         if (hadStandardCache) refreshStandardCatalogInBackground()
-        if (!hasMemberAccess) return standardCatalog
+        if (!hasMemberAccess) return EDITION_AVATARS + standardCatalog
         val hadMemberCache = cachedMemberCatalog != null
         val memberCatalog = getMemberAvatarCatalog()
         if (hadMemberCache) refreshMemberCatalogInBackground()
-        return standardCatalog + memberCatalog
+        return EDITION_AVATARS + standardCatalog + memberCatalog
     }
 
     private suspend fun getStandardAvatarCatalog(): List<AvatarCatalogItem> {
@@ -170,7 +170,8 @@ class AvatarRepository @Inject constructor(
     }
 
     fun getAvatarImageUrl(avatarId: String, catalog: List<AvatarCatalogItem>): String? {
-        return catalog.find { it.id == avatarId }?.imageUrl
+        return editionAvatar(avatarId)?.imageUrl
+            ?: catalog.find { it.id == avatarId }?.imageUrl
             ?: latestCachedMemberAvatar(avatarId)?.toURI()?.toString()
     }
 

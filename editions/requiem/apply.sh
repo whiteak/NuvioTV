@@ -9,7 +9,9 @@ sed -i 's#[A-Za-z ]* · built on Nuvio#Requiem · built on Nuvio#' app/src/main/
 sed -i 's#"com.nuviodebug.com"#"com.requiem.tv"#' app/build.gradle.kts
 sed -i "s#val EDITION_DEFAULT_THEME = AppTheme.VIOLET#val EDITION_DEFAULT_THEME = AppTheme.WHITE#" app/src/main/java/com/nuvio/tv/domain/model/AppTheme.kt
 sed -i 's#RELEASE_ASSET_PREFIX = "Ethereal-"#RELEASE_ASSET_PREFIX = "Requiem-"#' app/src/full/java/com/nuvio/tv/updater/AbiSelector.kt
+sed -i 's#const val EDITION_AVATARS_ENABLED = true#const val EDITION_AVATARS_ENABLED = false#' app/src/main/java/com/nuvio/tv/data/remote/supabase/EditionAvatars.kt
 grep -q 'com.requiem.tv' app/build.gradle.kts
 grep -q "EDITION_DEFAULT_THEME = AppTheme.WHITE" app/src/main/java/com/nuvio/tv/domain/model/AppTheme.kt
 grep -q '"Requiem-"' app/src/full/java/com/nuvio/tv/updater/AbiSelector.kt
+grep -q 'EDITION_AVATARS_ENABLED = false' app/src/main/java/com/nuvio/tv/data/remote/supabase/EditionAvatars.kt
 echo "Requiem edition applied."
