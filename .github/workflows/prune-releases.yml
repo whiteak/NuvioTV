@@ -1,0 +1,23 @@
+name: Remove old releases
+
+# One-off: deletes old releases Jason chose to remove (2026-10-29). Version tags are kept,
+# so release numbering never goes backwards.
+
+on:
+  push:
+    branches: ["claude/project-thread-k69t80"]
+    paths: [".github/workflows/prune-releases.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for tag in v1.1.0-beta.5.3 v1.1.0-beta.5.2 v1.1.0-beta.5.1 v1.1.0-beta.5; do
+            gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes && echo "Deleted $tag" || echo "::warning::Could not delete $tag"
+          done
