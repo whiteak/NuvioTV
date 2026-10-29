@@ -1,0 +1,24 @@
+name: Clean up build copies
+
+# One-off: deletes the temporary build copies (artifacts) kept by past runs. They count towards the
+# account's Actions storage; the apps themselves are on the Releases pages, which don't.
+
+on:
+  push:
+    branches: ["claude/project-thread-k69t80"]
+    paths: [".github/workflows/cleanup-artifacts.yml"]
+
+permissions:
+  actions: write
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" --jq '.artifacts[] | "\(.id) \(.size_in_bytes) \(.name)"' > list.txt || true
+          cat list.txt
+          awk '{s+=$2} END {printf "Total: %.1f MB\n", s/1048576}' list.txt
+          cut -d' ' -f1 list.txt | while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" || true; done
