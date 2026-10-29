@@ -196,3 +196,6 @@ jobs:
             --title "Ethereal ${VERSION}" \
             --notes-file "$RUNNER_TEMP/notes.md" \
             $prerelease
+          # Keep only the newest 3 Ethereal releases (tags stay, so numbering never goes backwards).
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,createdAt --jq 'sort_by(.createdAt) | reverse | .[].tagName' |
+            grep '^v' | tail -n +4 | while read -r old; do gh release delete "$old" --repo "$GITHUB_REPOSITORY" --yes || true; done
