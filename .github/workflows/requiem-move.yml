@@ -1,0 +1,30 @@
+name: Move Requiem updates (one time)
+
+# One time only, and only when Jason asks. Requiem TVs installed before the move look for updates in THIS repo's
+# releases. This copies the newest Requiem TV APK from whiteak/Requiem (which looks for its updates there) into one
+# release here, so installed Requiem TVs update once and from then on follow whiteak/Requiem.
+# The tag and title are deliberately not version numbers, so Ethereal TV's updater ignores this release, and it is
+# never marked latest. Requiem's updater reads the version from the APK's file name.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  move:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release list --repo whiteak/Requiem --limit 50 --json tagName,createdAt --jq 'sort_by(.createdAt) | reverse | .[].tagName' | grep '^tv-' | head -n 1)
+          [ -n "$tag" ] || { echo "::error::No TV release in whiteak/Requiem yet."; exit 1; }
+          gh release download "$tag" --repo whiteak/Requiem -p 'Requiem-TV-*.apk' -D out
+          apk=$(ls out/Requiem-TV-*.apk | head -n 1)
+          version=$(basename "$apk" .apk); version=${version#Requiem-TV-}
+          echo "Moving Requiem TV $version (from whiteak/Requiem $tag)"
+          printf 'Requiem for the TV %s: from this version on, Requiem looks for its updates at https://github.com/whiteak/Requiem.\n\nThis release is only here so Requiem TVs installed earlier update once. Ethereal TV ignores it.\n' "$version" > notes.md
+          gh release create "requiem-moved-$version" "$apk" --repo "$GITHUB_REPOSITORY" --latest=false --prerelease \
+            --title "Requiem now updates from its own place" --notes-file notes.md
