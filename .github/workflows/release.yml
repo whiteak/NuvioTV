@@ -1,20 +1,21 @@
-name: Sync and release Ethereal and Requiem
+name: Sync and release Ethereal
 
-# Weekly: merge the latest upstream Nuvio code into this fork (keeping the Ethereal and Requiem
-# customisations), then build and publish a release that the in-app updater picks up.
-# Also runs on pushes to the default branch. Each release gets the next build number.
+# Ethereal only, and only when Jason asks (Actions > Sync and release Ethereal > Run workflow): optionally merge
+# the latest upstream Nuvio code into this fork first (keeping Ethereal's customisations), then build and publish a
+# release that Ethereal's in-app updater picks up. Each release gets the next build number. Requiem is built on its
+# own (whiteak/Requiem); no schedule and no push trigger, so nothing here changes the other apps.
 
 on:
-  schedule:
-    - cron: "0 18 * * 0"
   workflow_dispatch:
     inputs:
+      sync:
+        description: Merge the latest official Nuvio code first
+        type: boolean
+        default: true
       force:
         description: Publish a new release even if nothing changed (for testing the in-app updater)
         type: boolean
         default: false
-  push:
-    branches: [dev]
 
 permissions:
   contents: write
@@ -31,7 +32,7 @@ env:
 jobs:
   sync:
     name: Merge upstream Nuvio
-    if: github.event_name != 'push'
+    if: inputs.sync
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +61,7 @@ jobs:
           git checkout HEAD -- .github/workflows
           git add -A .github/workflows
 
-          # Keep Ethereal and Requiem branding images when upstream changed the same files.
+          # Keep Ethereal's branding images when upstream changed the same files.
           unresolved=""
           for f in $(git diff --name-only --diff-filter=U); do
             case "$f" in
@@ -160,12 +161,6 @@ jobs:
           NUVIO_RELEASE_KEY_PASSWORD="$KEY_PASSWORD" NUVIO_RELEASE_STORE_PASSWORD="$KEY_PASSWORD" \
             ./gradlew :app:assembleFullDebug --stacktrace
           cp "app/build/outputs/apk/full/debug/app-full-universal-debug.apk" "$RUNNER_TEMP/Ethereal.apk"
-          # Requiem: the same app with its own name, artwork and app ID, so it installs alongside.
-          bash editions/requiem/apply.sh
-          NUVIO_RELEASE_STORE_FILE="$RUNNER_TEMP/signing.jks" NUVIO_RELEASE_KEY_ALIAS=$KEY_ALIAS \
-          NUVIO_RELEASE_KEY_PASSWORD="$KEY_PASSWORD" NUVIO_RELEASE_STORE_PASSWORD="$KEY_PASSWORD" \
-            ./gradlew :app:assembleFullDebug --stacktrace
-          cp "app/build/outputs/apk/full/debug/app-full-universal-debug.apk" "$RUNNER_TEMP/Requiem.apk"
           git checkout -- . && git clean -fdq -e local.properties -e local.dev.properties
 
       - name: Publish release
@@ -176,7 +171,6 @@ jobs:
           BASE: ${{ steps.version.outputs.base }}
         run: |
           cp "$RUNNER_TEMP/Ethereal.apk" "Ethereal-TV-${VERSION}.apk"
-          cp "$RUNNER_TEMP/Requiem.apk" "Requiem-TV-${VERSION}.apk"
           # Release notes: Nuvio's own notes for the version this build is based on, then this build's details.
           upstream_notes=""
           releases=$(gh api "repos/${UPSTREAM_REPO}/releases?per_page=50" 2>/dev/null || echo '[]')
@@ -187,11 +181,11 @@ jobs:
           if [ -n "$upstream_notes" ]; then echo "Using Nuvio ${BASE} release notes."; else echo "No Nuvio release notes found for ${BASE}."; fi
           {
             if [ -n "$upstream_notes" ]; then printf '%s\n\n---\n\n' "$upstream_notes"; fi
-            printf 'Ethereal %s, built on Nuvio %s.\n\nEthereal-* is Ethereal; Requiem-* is the Requiem edition.\n\nBuilt from commit %s\n' "$VERSION" "$BASE" "$(git rev-parse HEAD)"
+            printf 'Ethereal %s, built on Nuvio %s.\n\nBuilt from commit %s\n' "$VERSION" "$BASE" "$(git rev-parse HEAD)"
           } > "$RUNNER_TEMP/notes.md"
           prerelease=""
           case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
-          gh release create "v${VERSION}" "Ethereal-TV-${VERSION}.apk" "Requiem-TV-${VERSION}.apk" \
+          gh release create "v${VERSION}" "Ethereal-TV-${VERSION}.apk" \
             --target "$(git rev-parse HEAD)" \
             --title "Ethereal ${VERSION}" \
             --notes-file "$RUNNER_TEMP/notes.md" \
